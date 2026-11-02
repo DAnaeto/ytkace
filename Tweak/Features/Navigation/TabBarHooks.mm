@@ -713,16 +713,33 @@ static void YTKACESetPivotRenderer(id receiver, SEL selector, id renderer) {
     }
 }
 
+static BOOL YTKACEYouTubeHidesTabLabels(UIView *item) {
+    SEL getter = NSSelectorFromString(@"hideLabel");
+    if ([item respondsToSelector:getter] && ((BOOL (*)(id, SEL))objc_msgSend)(item, getter)) return YES;
+    Ivar mode = class_getInstanceVariable(object_getClass(item), "_enableIconOnlyBottomNav");
+    if (mode != NULL && strcmp(ivar_getTypeEncoding(mode), @encode(BOOL)) == 0 &&
+        *(BOOL *)((uint8_t *)(__bridge void *)item + ivar_getOffset(mode))) {
+        return YES;
+    }
+    SEL barGetter = NSSelectorFromString(@"hideItemLabels");
+    for (UIView *bar = item.superview; bar != nil; bar = bar.superview) {
+        if ([bar respondsToSelector:barGetter]) return ((BOOL (*)(id, SEL))objc_msgSend)(bar, barGetter);
+    }
+    return NO;
+}
+
 static BOOL YTKACETabLabelsHidden(UIView *item) {
     BOOL hidden = YTKACEFeatureEnabled(@"YTKACE.Preference.Tabs.LabelsHidden");
     static Class floatingClass;
     if (floatingClass == Nil) floatingClass = NSClassFromString(@"YTFloatingPivotBarView");
     SEL getter = NSSelectorFromString(@"hideLabel");
     SEL setter = NSSelectorFromString(@"setHideLabel:");
-    if (floatingClass == Nil || ![item respondsToSelector:getter] || ![item respondsToSelector:setter]) return hidden;
+    if (floatingClass == Nil || ![item respondsToSelector:getter] || ![item respondsToSelector:setter]) {
+        return hidden || YTKACEYouTubeHidesTabLabels(item);
+    }
     UIView *bar = item.superview;
     while (bar != nil && ![bar isKindOfClass:floatingClass]) bar = bar.superview;
-    if (bar == nil) return hidden;
+    if (bar == nil) return hidden || YTKACEYouTubeHidesTabLabels(item);
     if (((BOOL (*)(id, SEL))objc_msgSend)(item, getter) != hidden) {
         ((void (*)(id, SEL, BOOL))objc_msgSend)(item, setter, hidden);
         [item setNeedsLayout];
