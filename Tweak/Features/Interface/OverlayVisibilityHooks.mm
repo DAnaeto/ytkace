@@ -766,6 +766,7 @@ static void YTKACEVideoOverlayLayout(UIView *receiver, SEL selector) {
     if (OriginalVideoOverlayLayout != NULL) {
         ((void (*)(id, SEL))OriginalVideoOverlayLayout)(receiver, selector);
     }
+    YTKACEDiagnoseOverlay(receiver);
     YTKACEApplyOverlaySelectors(receiver);
     YTKACEApplyProductVisibility(receiver);
     if (YTKACEOverlayPreference(@"YTKACE.Preference.Overlay.DimmingRemoved")) {

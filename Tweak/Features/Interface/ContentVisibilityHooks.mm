@@ -2011,6 +2011,7 @@ static NSArray *YTKACEMixFilteredFeedSections(NSArray *sections) {
 }
 
 static NSArray *YTKACEFilteredFeedSections(id receiver, NSArray *sections) {
+    YTKACEDiagnoseFeedSections(receiver, sections);
     YTKACEFeedEnsureFlagObserver();
     NSArray *adFiltered = YTKACEMixFilteredFeedSections(
         YTKACEFilterAdSections(sections));

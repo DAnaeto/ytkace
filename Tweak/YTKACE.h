@@ -91,6 +91,8 @@ void YTKACEInstallSideloadCompatibilityHooks(void);
 void YTKACEInstallCastCompatibilityHooks(void);
 void YTKACEStartCastDiscovery(void);
 void YTKACEInstallTabBarHooks(void);
+void YTKACEDiagnoseFeedSections(id _Nullable receiver, NSArray *_Nullable sections);
+void YTKACEDiagnoseOverlay(UIView *_Nullable overlay);
 void YTKACERefreshPivotBarBackground(void);
 BOOL YTKACELiquidGlassAvailable(void);
 NSInteger YTKACETabBarGlassMode(void);

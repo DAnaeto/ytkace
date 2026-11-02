@@ -961,6 +961,11 @@ static NSString *YTKACEMenuItemIcon(id renderer) {
 
 static id YTKACEFilteredMenuRenderers(id renderers) {
     if (![renderers isKindOfClass:NSArray.class] || [renderers count] == 0) return renderers;
+    if (YTKACEDebugLogsEnabled()) {
+        NSMutableArray<NSString *> *icons = [NSMutableArray arrayWithCapacity:[renderers count]];
+        for (id renderer in (NSArray *)renderers) [icons addObject:YTKACEMenuItemIcon(renderer) ?: @"-"];
+        YTKACEDebugLog(@"diag", @"menu icons=%@", [icons componentsJoinedByString:@","]);
+    }
     NSDictionary<NSString *, NSString *> *hidden = @{
         @"CAST_ICON": @"YTKACE.Preference.Menu.CastHidden",
         @"QUEUE_PLAY_NEXT": @"YTKACE.Preference.Menu.PlayNextHidden",
