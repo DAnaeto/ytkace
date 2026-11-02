@@ -713,14 +713,33 @@ static void YTKACESetPivotRenderer(id receiver, SEL selector, id renderer) {
     }
 }
 
-static BOOL YTKACEYouTubeHidesTabLabels(UIView *item) {
-    SEL getter = NSSelectorFromString(@"hideLabel");
-    if ([item respondsToSelector:getter] && ((BOOL (*)(id, SEL))objc_msgSend)(item, getter)) return YES;
-    Ivar mode = class_getInstanceVariable(object_getClass(item), "_enableIconOnlyBottomNav");
-    if (mode != NULL && strcmp(ivar_getTypeEncoding(mode), @encode(BOOL)) == 0 &&
-        *(BOOL *)((uint8_t *)(__bridge void *)item + ivar_getOffset(mode))) {
+static id YTKACEItemRenderer(UIView *view);
+
+static BOOL YTKACEItemFlag(UIView *item, const char *name) {
+    Ivar flag = class_getInstanceVariable(object_getClass(item), name);
+    return flag != NULL && strcmp(ivar_getTypeEncoding(flag), @encode(BOOL)) == 0 &&
+        *(BOOL *)((uint8_t *)(__bridge void *)item + ivar_getOffset(flag));
+}
+
+static BOOL YTKACEYouTubeDropsTabTitle(UIView *item) {
+    Class experiment = NSClassFromString(@"YTFloatingBarExperiment");
+    SEL iconsOnly = NSSelectorFromString(@"isIconsOnly");
+    if ([experiment respondsToSelector:iconsOnly] && ((BOOL (*)(id, SEL))objc_msgSend)(experiment, iconsOnly)) {
         return YES;
     }
+    if (!YTKACEItemFlag(item, "_enableIconOnlyBottomNav") && !YTKACEItemFlag(item, "_enableIconOnlyOfflinePivotBar")) {
+        return NO;
+    }
+    id renderer = YTKACEItemRenderer(item);
+    if (renderer == nil) return NO;
+    id title = YTKACEValue(YTKACEValue(renderer, @"title"), @"stringWithFormattingRemoved");
+    return ![title isKindOfClass:NSString.class] || [title length] == 0;
+}
+
+static BOOL YTKACEYouTubeHidesTabLabels(UIView *item) {
+    if (YTKACEYouTubeDropsTabTitle(item)) return YES;
+    SEL getter = NSSelectorFromString(@"hideLabel");
+    if ([item respondsToSelector:getter] && ((BOOL (*)(id, SEL))objc_msgSend)(item, getter)) return YES;
     SEL barGetter = NSSelectorFromString(@"hideItemLabels");
     for (UIView *bar = item.superview; bar != nil; bar = bar.superview) {
         if ([bar respondsToSelector:barGetter]) return ((BOOL (*)(id, SEL))objc_msgSend)(bar, barGetter);
@@ -744,7 +763,7 @@ static BOOL YTKACETabLabelsHidden(UIView *item) {
         ((void (*)(id, SEL, BOOL))objc_msgSend)(item, setter, hidden);
         [item setNeedsLayout];
     }
-    return hidden;
+    return hidden || YTKACEYouTubeDropsTabTitle(item);
 }
 
 static void YTKACESetLabelsHidden(UIView *view, BOOL hidden) {
