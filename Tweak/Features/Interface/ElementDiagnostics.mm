@@ -90,8 +90,11 @@ static NSString *YTKACEDiagnosticWords(id node) {
             continue;
         }
         NSUInteger count = index - start;
-        BOOL address = character == '@' || (start > 0 && bytes[start - 1] == '@');
-        if (!address && count >= 6 && count <= 64 && bytes[start] >= 'a' && bytes[start] <= 'z' &&
+        BOOL text = character == ' ' || (start > 0 && bytes[start - 1] == '@');
+        for (NSUInteger next = index; !text && next < length && bytes[next] > ' ' && bytes[next] < 0x7F; next++) {
+            text = bytes[next] == '@';
+        }
+        if (!text && count >= 6 && count <= 64 && bytes[start] >= 'a' && bytes[start] <= 'z' &&
             bytes[index - 1] != '.') {
             NSString *word = [[NSString alloc] initWithBytes:bytes + start length:count
                                                     encoding:NSASCIIStringEncoding];
