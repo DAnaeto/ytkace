@@ -205,3 +205,7 @@ void YTKACEDiagnoseOverlay(UIView *overlay) {
     NSUInteger budget = YTKACEDiagnosticViewBudget;
     YTKACEDiagnosticWalkViews(overlay, 0, &budget, visited);
 }
+
+__attribute__((constructor)) static void YTKACEDiagnosticLoaded(void) {
+    YTKACEDebugLog(@"diag", @"element names on");
+}
