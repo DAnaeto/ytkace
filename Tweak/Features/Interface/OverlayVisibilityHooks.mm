@@ -680,6 +680,9 @@ static void YTKACEApplyOverlaySelectors(id overlay) {
         @"infoCardButton": @"YTKACE.Preference.Overlay.InfoCardsHidden",
         @"watermarkView": @"YTKACE.Preference.Overlay.WatermarkHidden",
         @"endscreenView": @"YTKACE.Preference.Overlay.EndScreenHidden",
+        @"creatorEndscreenView": @"YTKACE.Preference.Overlay.EndScreenHidden",
+        @"autonavEndscreenView": @"YTKACE.Preference.Overlay.AutoplayPromptHidden",
+        @"autonavBackgroundView": @"YTKACE.Preference.Overlay.AutoplayPromptHidden",
         @"playPauseButton": @"YTKACE.Preference.Overlay.PlayPauseHidden",
         @"overflowButton": @"YTKACE.Preference.Overlay.MoreButtonHidden",
         @"settingsButton": @"YTKACE.Preference.Overlay.MoreButtonHidden"
