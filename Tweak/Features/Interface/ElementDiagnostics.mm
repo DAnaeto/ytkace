@@ -11,6 +11,7 @@ static NSUInteger const YTKACEDiagnosticArrayLimit = 8;
 static NSUInteger const YTKACEDiagnosticSeenLimit = 1000;
 static NSUInteger const YTKACEDiagnosticViewBudget = 600;
 static NSUInteger const YTKACEDiagnosticIdentifierLimit = 96;
+static NSUInteger const YTKACEDiagnosticWordLimit = 12;
 
 static BOOL YTKACEDiagnosticFirstSighting(NSString *signature) {
     static NSMutableSet<NSString *> *seen;
@@ -75,10 +76,42 @@ static NSString *YTKACEDiagnosticIdentifier(id node) {
     return nil;
 }
 
+static NSString *YTKACEDiagnosticWords(id node) {
+    id data = YTKACEDiagnosticValue(node, @"data");
+    if (![data isKindOfClass:NSData.class]) return nil;
+    const unsigned char *bytes = (const unsigned char *)[data bytes];
+    NSUInteger length = [data length];
+    NSMutableOrderedSet<NSString *> *words = [NSMutableOrderedSet orderedSet];
+    NSUInteger start = 0;
+    for (NSUInteger index = 0; index <= length && words.count < YTKACEDiagnosticWordLimit; index++) {
+        unsigned char character = index < length ? bytes[index] : 0;
+        if ((character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') ||
+            character == '_' || character == '.') {
+            continue;
+        }
+        NSUInteger count = index - start;
+        BOOL address = character == '@' || (start > 0 && bytes[start - 1] == '@');
+        if (!address && count >= 6 && count <= 64 && bytes[start] >= 'a' && bytes[start] <= 'z' &&
+            bytes[index - 1] != '.') {
+            NSString *word = [[NSString alloc] initWithBytes:bytes + start length:count
+                                                    encoding:NSASCIIStringEncoding];
+            if ([word containsString:@".eml"] || [word hasPrefix:@"id."] || [word hasPrefix:@"eml."]) {
+                [words addObject:word];
+            }
+        }
+        start = index + 1;
+    }
+    return words.count != 0 ? [words.array componentsJoinedByString:@" "] : nil;
+}
+
 static NSString *YTKACEDiagnosticTree(id node, NSUInteger depth, NSUInteger *budget, NSHashTable *path) {
     NSMutableString *text = [NSStringFromClass([node class]) mutableCopy];
     NSString *identifier = YTKACEDiagnosticIdentifier(node);
     if (identifier != nil) [text appendFormat:@"#%@", identifier];
+    if ([text hasPrefix:@"YTIElementRenderer"]) {
+        NSString *words = YTKACEDiagnosticWords(node);
+        if (words != nil) [text appendFormat:@"<%@>", words];
+    }
     Class messageClass = NSClassFromString(@"GPBMessage");
     if (messageClass == Nil || depth >= YTKACEDiagnosticMaxDepth || *budget == 0 || [path containsObject:node]) {
         return text;
