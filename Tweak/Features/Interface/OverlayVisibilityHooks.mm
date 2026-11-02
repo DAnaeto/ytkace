@@ -679,6 +679,7 @@ static void YTKACEApplyOverlaySelectors(id overlay) {
         @"closedCaptionsOrSubtitlesButton": @"YTKACE.Preference.Overlay.CaptionsButtonHidden",
         @"infoCardButton": @"YTKACE.Preference.Overlay.InfoCardsHidden",
         @"watermarkView": @"YTKACE.Preference.Overlay.WatermarkHidden",
+        @"featuredChannelWatermarkImageView": @"YTKACE.Preference.Overlay.WatermarkHidden",
         @"endscreenView": @"YTKACE.Preference.Overlay.EndScreenHidden",
         @"creatorEndscreenView": @"YTKACE.Preference.Overlay.EndScreenHidden",
         @"autonavEndscreenView": @"YTKACE.Preference.Overlay.AutoplayPromptHidden",
