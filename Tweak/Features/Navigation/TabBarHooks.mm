@@ -721,12 +721,14 @@ static BOOL YTKACEItemFlag(UIView *item, const char *name) {
         *(BOOL *)((uint8_t *)(__bridge void *)item + ivar_getOffset(flag));
 }
 
+static IMP OriginalIsIconsOnly;
+
+static BOOL YTKACEIsIconsOnly(id receiver, SEL selector) {
+    if (!YTKACEFeatureEnabled(@"YTKACE.Preference.Tabs.LabelsHidden")) return NO;
+    return OriginalIsIconsOnly != NULL && ((BOOL (*)(id, SEL))OriginalIsIconsOnly)(receiver, selector);
+}
+
 static BOOL YTKACEYouTubeDropsTabTitle(UIView *item) {
-    Class experiment = NSClassFromString(@"YTFloatingBarExperiment");
-    SEL iconsOnly = NSSelectorFromString(@"isIconsOnly");
-    if ([experiment respondsToSelector:iconsOnly] && ((BOOL (*)(id, SEL))objc_msgSend)(experiment, iconsOnly)) {
-        return YES;
-    }
     if (!YTKACEItemFlag(item, "_enableIconOnlyBottomNav") && !YTKACEItemFlag(item, "_enableIconOnlyOfflinePivotBar")) {
         return NO;
     }
@@ -3897,6 +3899,10 @@ static void YTKACEPivotItemTraitChanged(UIView *receiver,
 
 void YTKACEInstallTabBarHooks(void) {
     YTKACERefreshTabTint();
+    YTKACEInstallClassHook(@"YTFloatingBarExperiment",
+                           @"isIconsOnly",
+                           (IMP)YTKACEIsIconsOnly,
+                           &OriginalIsIconsOnly);
     YTKACEInstallInstanceHook(@"YTPivotBarItemView",
                               @"iconTintColorSelected",
                               (IMP)YTKACEIconTintSelected,
