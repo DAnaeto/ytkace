@@ -35,6 +35,7 @@ static IMP OriginalTimelyShelfHeightVC;
 static IMP OriginalTimelyShelfHeightBar;
 static IMP OriginalTimelyShelfHeightInput;
 static IMP OriginalPlayerBarShouldShow;
+static IMP OriginalAutonavShouldShowEndscreen;
 
 static NSUInteger YTKACEProductHiddenCount = 0;
 
@@ -682,8 +683,6 @@ static void YTKACEApplyOverlaySelectors(id overlay) {
         @"featuredChannelWatermarkImageView": @"YTKACE.Preference.Overlay.WatermarkHidden",
         @"endscreenView": @"YTKACE.Preference.Overlay.EndScreenHidden",
         @"creatorEndscreenView": @"YTKACE.Preference.Overlay.EndScreenHidden",
-        @"autonavEndscreenView": @"YTKACE.Preference.Overlay.AutoplayPromptHidden",
-        @"autonavBackgroundView": @"YTKACE.Preference.Overlay.AutoplayPromptHidden",
         @"playPauseButton": @"YTKACE.Preference.Overlay.PlayPauseHidden",
         @"overflowButton": @"YTKACE.Preference.Overlay.MoreButtonHidden",
         @"settingsButton": @"YTKACE.Preference.Overlay.MoreButtonHidden"
@@ -921,6 +920,12 @@ static BOOL YTKACEPlayerBarShouldShow(id receiver, SEL selector, id controller) 
     return ((BOOL (*)(id, SEL, id))OriginalPlayerBarShouldShow)(receiver, selector, controller);
 }
 
+static BOOL YTKACEAutonavShouldShowEndscreen(id receiver, SEL selector) {
+    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Overlay.AutoplayPromptHidden")) return NO;
+    return OriginalAutonavShouldShowEndscreen != NULL &&
+        ((BOOL (*)(id, SEL))OriginalAutonavShouldShowEndscreen)(receiver, selector);
+}
+
 static NSString *const YTKACEFullscreenActionsKey =
     @"YTKACE.Preference.Overlay.FullscreenActionsHidden";
 
@@ -1072,4 +1077,8 @@ void YTKACEInstallOverlayVisibilityHooks(void) {
                               @"playerBarControllerShouldShowPlayerBarView:",
                               (IMP)YTKACEPlayerBarShouldShow,
                               &OriginalPlayerBarShouldShow);
+    YTKACEInstallInstanceHook(@"YTAutonavEndscreenController",
+                              @"shouldShowEndscreen",
+                              (IMP)YTKACEAutonavShouldShowEndscreen,
+                              &OriginalAutonavShouldShowEndscreen);
 }
