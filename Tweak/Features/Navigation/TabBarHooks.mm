@@ -1069,6 +1069,44 @@ static BOOL YTKACEDownloadsAreVisible(void) {
     return NO;
 }
 
+static BOOL YTKACENativeTabRows(UIView *view, CGRect *iconFrame, CGRect *labelFrame) {
+    for (UIView *sibling in view.superview.subviews) {
+        if (sibling == view || ![NSStringFromClass(sibling.class) containsString:@"PivotBarItemView"]) {
+            continue;
+        }
+        UIButton *button = YTKACEValue(sibling, @"navigationButton");
+        if (![button isKindOfClass:UIButton.class]) continue;
+        UILabel *label = button.titleLabel;
+        UIImageView *image = button.imageView;
+        if (label.hidden || label.alpha < 0.01 || label.text.length == 0 || CGRectIsEmpty(label.frame) ||
+            image == nil || image.hidden || CGRectIsEmpty(image.frame)) {
+            continue;
+        }
+        *iconFrame = [button convertRect:image.frame toView:view];
+        *labelFrame = [button convertRect:label.frame toView:view];
+        return YES;
+    }
+    return NO;
+}
+
+static void YTKACELayoutTabIconAndLabel(UIView *view, UIView *icon, UILabel *label, BOOL hideLabel) {
+    CGFloat width = CGRectGetWidth(view.bounds);
+    CGFloat height = CGRectGetHeight(view.bounds);
+    CGFloat size = 24.0;
+    CGFloat labelHeight = ceil(label.font.lineHeight);
+    CGFloat iconY = hideLabel ? (height - size) * 0.5 : (height - size - 2.0 - labelHeight) * 0.5;
+    CGFloat labelY = iconY + size + 2.0;
+    CGRect nativeIcon = CGRectZero;
+    CGRect nativeLabel = CGRectZero;
+    if (!hideLabel && YTKACENativeTabRows(view, &nativeIcon, &nativeLabel)) {
+        iconY = CGRectGetMidY(nativeIcon) - size * 0.5;
+        labelY = CGRectGetMinY(nativeLabel);
+        labelHeight = CGRectGetHeight(nativeLabel);
+    }
+    icon.frame = CGRectMake((width - size) * 0.5, iconY, size, size);
+    label.frame = CGRectMake(0.0, labelY, width, labelHeight);
+}
+
 static void YTKACERestorePivotItem(UIView *view,
                                    UILabel *nativeLabel,
                                    BOOL hideLabel) {
@@ -1164,17 +1202,7 @@ static void YTKACEApplyDownloadIcon(UIView *view) {
     imageView.image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     imageView.tintColor = tabColor;
     imageView.hidden = NO;
-    CGFloat size = 24.0;
-    imageView.frame = CGRectMake(
-        (CGRectGetWidth(view.bounds) - size) * 0.5,
-        hideLabel ? (CGRectGetHeight(view.bounds) - size) * 0.5 : 4.0,
-        size,
-        size
-    );
-    label.frame = CGRectMake(0.0,
-                             MAX(0.0, CGRectGetHeight(view.bounds) - 16.0),
-                             CGRectGetWidth(view.bounds),
-                             14.0);
+    YTKACELayoutTabIconAndLabel(view, imageView, label, hideLabel);
 }
 
 static NSDictionary *YTKACEExtraTabIcon(NSString *token) {
@@ -1324,14 +1352,7 @@ static void YTKACEApplyExtraTabIcon(UIView *view) {
     icon.image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     icon.tintColor = YTKACETabForegroundColor(view);
     icon.hidden = NO;
-    CGFloat size = 24.0;
     BOOL hideLabel = YTKACETabLabelsHidden(view);
-    icon.frame = CGRectMake(
-        (CGRectGetWidth(view.bounds) - size) * 0.5,
-        hideLabel ? (CGRectGetHeight(view.bounds) - size) * 0.5 : 4.0,
-        size,
-        size
-    );
     UILabel *nativeLabel = YTKACEFindNativeLabel(view);
     UILabel *label = (UILabel *)[view viewWithTag:YTKACEExtraLabelTag];
     NSString *title = nativeLabel.text.length != 0
@@ -1354,12 +1375,7 @@ static void YTKACEApplyExtraTabIcon(UIView *view) {
     label.textColor = icon.tintColor;
     label.hidden = hideLabel;
     label.alpha = hideLabel ? 0.0 : 1.0;
-    label.frame = CGRectMake(
-        0.0,
-        MAX(0.0, CGRectGetHeight(view.bounds) - 16.0),
-        CGRectGetWidth(view.bounds),
-        14.0
-    );
+    YTKACELayoutTabIconAndLabel(view, icon, label, hideLabel);
 }
 
 static NSString *const YTKACETintModeKey = @"YTKACE.Preference.Tabs.SelectedTint";
