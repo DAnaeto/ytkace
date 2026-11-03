@@ -559,16 +559,65 @@ static void YTKACEApplyTabName(id item, NSString *token) {
     YTKACESetTabTitle(target, replacement);
 }
 
-static void YTKACEFillEmptyTabTitle(id item) {
-    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Tabs.LabelsHidden")) return;
-    id renderer = YTKACEValue(item, @"pivotBarItemRenderer");
-    if (renderer == nil) return;
-    id title = YTKACEValue(YTKACEValue(renderer, @"title"), @"stringWithFormattingRemoved");
-    if ([title isKindOfClass:NSString.class] && [title length] != 0) return;
-    id accessibility = YTKACEValue(YTKACEValue(renderer, @"accessibility"), @"accessibilityData");
-    id label = YTKACEValue(accessibility, @"label");
-    if (![label isKindOfClass:NSString.class] || [label length] == 0) return;
+static BOOL YTKACETabFieldSet(id message, NSString *field) {
+    NSString *suffix = [[field substringToIndex:1].uppercaseString stringByAppendingString:[field substringFromIndex:1]];
+    SEL has = NSSelectorFromString([@"has" stringByAppendingString:suffix]);
+    return ![message respondsToSelector:has] || ((BOOL (*)(id, SEL))objc_msgSend)(message, has);
+}
+
+static NSString *YTKACETabSetter(NSString *field) {
+    return [NSString stringWithFormat:@"set%@%@:", [field substringToIndex:1].uppercaseString,
+                                      [field substringFromIndex:1]];
+}
+
+static int32_t YTKACEOneofCase(id message, NSString *oneof) {
+    SEL selector = NSSelectorFromString([oneof stringByAppendingString:@"OneOfCase"]);
+    return [message respondsToSelector:selector] ? ((int32_t (*)(id, SEL))objc_msgSend)(message, selector) : 0;
+}
+
+static const int32_t YTKACEIconOnlyItemCase = 318370163;
+
+static id YTKACELabeledTab(id item) {
+    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Tabs.LabelsHidden") ||
+        YTKACEOneofCase(item, @"items") != YTKACEIconOnlyItemCase) {
+        return item;
+    }
+    id iconOnly = YTKACEValue(item, @"pivotBarIconOnlyItemRenderer");
+    id label = YTKACEValue(YTKACEValue(YTKACEValue(iconOnly, @"accessibility"), @"accessibilityData"), @"label");
+    id renderer = YTKACENew(@"YTIPivotBarItemRenderer");
+    id supported = YTKACENew(@"YTIPivotBarSupportedRenderers");
+    if (![label isKindOfClass:NSString.class] || [label length] == 0 || renderer == nil || supported == nil) {
+        return item;
+    }
+    for (NSString *field in @[@"pivotIdentifier", @"targetId", @"navigationEndpoint", @"accessibility",
+                              @"presentationStyle", @"trackingParams", @"progressIndicator",
+                              @"onSelected", @"onDeselected", @"indicator", @"onLongPress"]) {
+        if (YTKACETabFieldSet(iconOnly, field)) {
+            YTKACESetValue(renderer, YTKACETabSetter(field), YTKACEValue(iconOnly, field));
+        }
+    }
+    NSString *image = @{@5: @"icon", @10: @"thumbnail", @16: @"avatar"}[@(YTKACEOneofCase(iconOnly, @"image"))];
+    if (image != nil) {
+        YTKACESetValue(renderer, YTKACETabSetter(image), YTKACEValue(iconOnly, image));
+    }
+    for (NSString *field in @[@"navigationType", @"notificationSelectionBehavior", @"isDisabled"]) {
+        SEL getter = NSSelectorFromString(field);
+        SEL setter = NSSelectorFromString(YTKACETabSetter(field));
+        if (![iconOnly respondsToSelector:getter] || ![renderer respondsToSelector:setter] ||
+            !YTKACETabFieldSet(iconOnly, field)) {
+            continue;
+        }
+        if ([field isEqualToString:@"isDisabled"]) {
+            BOOL value = ((BOOL (*)(id, SEL))objc_msgSend)(iconOnly, getter);
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(renderer, setter, value);
+        } else {
+            int32_t value = ((int32_t (*)(id, SEL))objc_msgSend)(iconOnly, getter);
+            ((void (*)(id, SEL, int32_t))objc_msgSend)(renderer, setter, value);
+        }
+    }
     YTKACESetTabTitle(renderer, label);
+    YTKACESetValue(supported, @"setPivotBarItemRenderer:", renderer);
+    return supported;
 }
 
 static BOOL YTKACEIsDownloadTab(id item) {
@@ -617,8 +666,8 @@ static void YTKACESetPivotRenderer(id receiver, SEL selector, id renderer) {
                     continue;
                 }
                 if (YTKACEMasterEnabled()) {
+                    candidate = YTKACELabeledTab(candidate);
                     YTKACEApplyTabName(candidate, token);
-                    YTKACEFillEmptyTabTitle(candidate);
                 }
                 [filtered addObject:candidate];
             }
