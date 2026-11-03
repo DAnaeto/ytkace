@@ -47,7 +47,7 @@ static BOOL YTKACESnapshotIsFeaturedWatermark(UIView *view) {
 }
 
 static void YTKACESnapshotWalk(UIView *view, NSMutableArray<NSString *> *lines, NSUInteger depth) {
-    if (view == nil || depth > 80) return;
+    if (view == nil || depth > 120) return;
     NSString *name = NSStringFromClass(view.class);
     NSString *token = [[NSString stringWithFormat:@"%@ %@", name, view.accessibilityIdentifier ?: @""]
         lowercaseString];
@@ -80,6 +80,56 @@ static void YTKACESnapshotWalk(UIView *view, NSMutableArray<NSString *> *lines, 
     }
 }
 
+static NSString *YTKACESnapshotChain(UIView *view, NSUInteger count) {
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+    UIView *current = view.superview;
+    for (NSUInteger index = 0; current != nil && index < count; index++, current = current.superview) {
+        NSString *identifier = current.accessibilityIdentifier;
+        [names addObject:identifier.length != 0
+            ? [NSString stringWithFormat:@"%@#%@", NSStringFromClass(current.class), identifier]
+            : NSStringFromClass(current.class)];
+    }
+    return [names componentsJoinedByString:@"<"];
+}
+
+static void YTKACESnapshotCorner(UIView *view, UIWindow *window, NSMutableArray<NSString *> *lines, NSUInteger depth) {
+    if (view == nil || depth > 120 || view.hidden || view.alpha < 0.01) return;
+    CGRect frame = [view convertRect:view.bounds toView:window];
+    CGFloat width = CGRectGetWidth(window.bounds);
+    CGFloat height = CGRectGetHeight(window.bounds);
+    if (CGRectGetMinX(frame) >= width * 0.8 && CGRectGetMinY(frame) >= height * 0.6 &&
+        CGRectGetWidth(frame) >= 8.0 && CGRectGetHeight(frame) >= 8.0 &&
+        CGRectGetWidth(frame) <= 160.0 && CGRectGetHeight(frame) <= 160.0) {
+        UIImage *image = [view isKindOfClass:UIImageView.class] ? ((UIImageView *)view).image : nil;
+        [lines addObject:[NSString stringWithFormat:
+            @"corner %@ id=%@ label=%@ frame=%@ image=%@ contents=%d parents=%@",
+            NSStringFromClass(view.class), view.accessibilityIdentifier ?: @"-",
+            view.accessibilityLabel ?: @"-", NSStringFromCGRect(frame),
+            image != nil ? NSStringFromCGSize(image.size) : @"-", view.layer.contents != nil,
+            YTKACESnapshotChain(view, 10)]];
+    }
+    for (UIView *subview in view.subviews) {
+        YTKACESnapshotCorner(subview, window, lines, depth + 1);
+    }
+}
+
+static void YTKACESnapshotOverlays(UIView *view, NSMutableArray<NSString *> *lines, NSUInteger depth) {
+    if (view == nil || depth > 120) return;
+    if ([NSStringFromClass(view.class) isEqualToString:@"YTMainAppVideoPlayerOverlayView"]) {
+        id watermark = YTKACESnapshotValue(view, @"featuredChannelWatermarkImageView");
+        UIView *watermarkView = [watermark isKindOfClass:UIView.class] ? watermark : nil;
+        [lines addObject:[NSString stringWithFormat:
+            @"overlay enabled=%d watermark=%@ inWindow=%d hidden=%d super=%@",
+            YTKACESnapshotFlag(view, @"isWatermarkEnabled"),
+            watermark != nil ? NSStringFromClass([watermark class]) : @"nil",
+            watermarkView.window != nil, watermarkView.hidden,
+            watermarkView.superview != nil ? NSStringFromClass(watermarkView.superview.class) : @"-"]];
+    }
+    for (UIView *subview in view.subviews) {
+        YTKACESnapshotOverlays(subview, lines, depth + 1);
+    }
+}
+
 static void YTKACESnapshotTick(void) {
     if (!YTKACEDebugLogsEnabled()) return;
     NSMutableArray<NSString *> *lines = [NSMutableArray array];
@@ -87,8 +137,11 @@ static void YTKACESnapshotTick(void) {
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
         if (![scene isKindOfClass:UIWindowScene.class]) continue;
         for (UIWindow *window in ((UIWindowScene *)scene).windows) {
-            if (CGRectGetWidth(window.bounds) > CGRectGetHeight(window.bounds)) landscape = YES;
+            BOOL wide = CGRectGetWidth(window.bounds) > CGRectGetHeight(window.bounds);
+            if (wide) landscape = YES;
             YTKACESnapshotWalk(window, lines, 0);
+            YTKACESnapshotOverlays(window, lines, 0);
+            if (wide) YTKACESnapshotCorner(window, window, lines, 0);
         }
     }
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
