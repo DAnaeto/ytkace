@@ -620,6 +620,17 @@ static id YTKACELabeledTab(id item) {
     return supported;
 }
 
+static void YTKACEFillEmptyTabTitle(id item) {
+    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Tabs.LabelsHidden")) return;
+    id renderer = YTKACEValue(item, @"pivotBarItemRenderer");
+    if (renderer == nil) return;
+    id title = YTKACEValue(YTKACEValue(renderer, @"title"), @"stringWithFormattingRemoved");
+    if ([title isKindOfClass:NSString.class] && [title length] != 0) return;
+    id label = YTKACEValue(YTKACEValue(YTKACEValue(renderer, @"accessibility"), @"accessibilityData"), @"label");
+    if (![label isKindOfClass:NSString.class] || [label length] == 0) return;
+    YTKACESetTabTitle(renderer, label);
+}
+
 static BOOL YTKACEIsDownloadTab(id item) {
     NSString *token = YTKACETabToken(item);
     if ([token containsString:@"ytkace"]) {
@@ -735,6 +746,14 @@ static void YTKACESetPivotRenderer(id receiver, SEL selector, id renderer) {
                 if (downloadItem != nil) {
                     YTKACENoteStartupIdentifier(@"ytkace", downloadItem);
                     [filtered addObject:downloadItem];
+                }
+            }
+
+            if (YTKACEMasterEnabled()) {
+                for (id item in filtered) {
+                    if (![YTKACECanonicalTabToken(YTKACETabToken(item)) isEqualToString:@"create"]) {
+                        YTKACEFillEmptyTabTitle(item);
+                    }
                 }
             }
 
