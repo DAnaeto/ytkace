@@ -528,6 +528,23 @@ static NSInteger YTKACETabOrderIndex(NSString *token, NSArray *order) {
     return NSIntegerMax;
 }
 
+static void YTKACESetTabTitle(id target, NSString *text) {
+    Class formattedClass = NSClassFromString(@"YTIFormattedString");
+    SEL formattedSelector = NSSelectorFromString(@"formattedStringWithString:");
+    id value = text;
+    if (formattedClass != Nil && [formattedClass respondsToSelector:formattedSelector]) {
+        value = ((id (*)(id, SEL, id))objc_msgSend)(
+            formattedClass,
+            formattedSelector,
+            text
+        );
+    }
+    SEL selector = NSSelectorFromString(@"setTitle:");
+    if ([target respondsToSelector:selector]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(target, selector, value);
+    }
+}
+
 static void YTKACEApplyTabName(id item, NSString *token) {
     NSDictionary *names =
         [NSUserDefaults.standardUserDefaults dictionaryForKey:@"YTKACE.Preference.Tabs.Names"];
@@ -539,20 +556,19 @@ static void YTKACEApplyTabName(id item, NSString *token) {
         @"pivotBarItemRenderer",
         @"pivotBarIconOnlyItemRenderer"
     ]) ?: item;
-    Class formattedClass = NSClassFromString(@"YTIFormattedString");
-    SEL formattedSelector = NSSelectorFromString(@"formattedStringWithString:");
-    id value = replacement;
-    if (formattedClass != Nil && [formattedClass respondsToSelector:formattedSelector]) {
-        value = ((id (*)(id, SEL, id))objc_msgSend)(
-            formattedClass,
-            formattedSelector,
-            replacement
-        );
-    }
-    SEL selector = NSSelectorFromString(@"setTitle:");
-    if ([target respondsToSelector:selector]) {
-        ((void (*)(id, SEL, id))objc_msgSend)(target, selector, value);
-    }
+    YTKACESetTabTitle(target, replacement);
+}
+
+static void YTKACEFillEmptyTabTitle(id item) {
+    if (YTKACEFeatureEnabled(@"YTKACE.Preference.Tabs.LabelsHidden")) return;
+    id renderer = YTKACEValue(item, @"pivotBarItemRenderer");
+    if (renderer == nil) return;
+    id title = YTKACEValue(YTKACEValue(renderer, @"title"), @"stringWithFormattingRemoved");
+    if ([title isKindOfClass:NSString.class] && [title length] != 0) return;
+    id accessibility = YTKACEValue(YTKACEValue(renderer, @"accessibility"), @"accessibilityData");
+    id label = YTKACEValue(accessibility, @"label");
+    if (![label isKindOfClass:NSString.class] || [label length] == 0) return;
+    YTKACESetTabTitle(renderer, label);
 }
 
 static BOOL YTKACEIsDownloadTab(id item) {
@@ -602,6 +618,7 @@ static void YTKACESetPivotRenderer(id receiver, SEL selector, id renderer) {
                 }
                 if (YTKACEMasterEnabled()) {
                     YTKACEApplyTabName(candidate, token);
+                    YTKACEFillEmptyTabTitle(candidate);
                 }
                 [filtered addObject:candidate];
             }
