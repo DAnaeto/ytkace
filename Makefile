@@ -76,6 +76,7 @@ YTKACE_FILES = \
 	Tweak/Features/Navigation/NavigationBehaviorHooks.mm \
 	Tweak/Features/Gestures/PlayerGestures.mm \
 	Tweak/Features/Interface/OverlayVisibilityHooks.mm \
+	Tweak/Features/Interface/TestSnapshot.mm \
 	Tweak/Features/Interface/ContentVisibilityHooks.mm \
 	Tweak/Features/Interface/AiSList.mm \
 	Tweak/Features/Interface/AiSListReport.mm \
