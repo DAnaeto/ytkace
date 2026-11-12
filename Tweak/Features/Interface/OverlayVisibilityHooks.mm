@@ -7,6 +7,7 @@
 #import "../Downloads/DownloadLog.h"
 #import <objc/runtime.h>
 #import <math.h>
+#import <os/lock.h>
 
 static const void *YTKACEOverlayHiddenAssociation = &YTKACEOverlayHiddenAssociation;
 static const void *YTKACEOverlayForcedAssociation = &YTKACEOverlayForcedAssociation;
@@ -775,6 +776,86 @@ static YTKACESubtitlePlace YTKACENodeSubtitlePlace(id node) {
     return YTKACESubtitlePlaceUnknown;
 }
 
+static NSHashTable *YTKACESubtitleTrace;
+static os_unfair_lock YTKACESubtitleTraceLock = OS_UNFAIR_LOCK_INIT;
+
+static BOOL YTKACETraceFlag(id node, NSString *name) {
+    SEL selector = NSSelectorFromString(name);
+    return [node respondsToSelector:selector] &&
+        ((BOOL (*)(id, SEL))objc_msgSend)(node, selector);
+}
+
+static NSString *YTKACETraceState(id node) {
+    return [NSString stringWithFormat:
+        @"node=%p place=%ld main=%d ctrl=%d laidOut=%d loaded=%d inHierarchy=%d",
+        node, (long)YTKACENodeSubtitlePlace(node), NSThread.isMainThread,
+        YTKACEElementsValue(node, @"nodeController") != nil,
+        YTKACEElementsValue(node, @"calculatedLayout") != nil,
+        YTKACETraceFlag(node, @"isNodeLoaded"), YTKACETraceFlag(node, @"isInHierarchy")];
+}
+
+static BOOL YTKACETraced(id node) {
+    os_unfair_lock_lock(&YTKACESubtitleTraceLock);
+    BOOL traced = [YTKACESubtitleTrace containsObject:node];
+    os_unfair_lock_unlock(&YTKACESubtitleTraceLock);
+    return traced;
+}
+
+static void YTKACETraceSubtitleSet(id node) {
+    os_unfair_lock_lock(&YTKACESubtitleTraceLock);
+    if (YTKACESubtitleTrace == nil) YTKACESubtitleTrace = [NSHashTable weakObjectsHashTable];
+    [YTKACESubtitleTrace addObject:node];
+    os_unfair_lock_unlock(&YTKACESubtitleTraceLock);
+    NSMutableArray<NSString *> *frames = [NSMutableArray array];
+    NSArray<NSString *> *symbols = [NSThread callStackSymbols];
+    for (NSUInteger index = 1; index < symbols.count && index < 16; index++) {
+        NSArray *parts = [symbols[index] componentsSeparatedByCharactersInSet:
+            NSCharacterSet.whitespaceCharacterSet];
+        NSMutableArray *words = [NSMutableArray array];
+        for (NSString *part in parts) if (part.length != 0) [words addObject:part];
+        if (words.count > 1) [words removeObjectAtIndex:0];
+        [frames addObject:[words componentsJoinedByString:@" "]];
+    }
+    YTKACEDebugLog(@"products", @"set %@ | %@", YTKACETraceState(node),
+                   [frames componentsJoinedByString:@" | "]);
+}
+
+static IMP OriginalTextNodeSetNodeController;
+static IMP OriginalSetParentOnController;
+
+static void YTKACETraceSetNodeController(id receiver, SEL selector, id controller) {
+    ((void (*)(id, SEL, id))OriginalTextNodeSetNodeController)(receiver, selector, controller);
+    if (YTKACETraced(receiver)) {
+        YTKACEDebugLog(@"products", @"attach %@", YTKACETraceState(receiver));
+    }
+}
+
+static void YTKACETraceSetParent(id receiver, SEL selector, id controller, id parent) {
+    ((void (*)(id, SEL, id, id))OriginalSetParentOnController)(receiver, selector, controller, parent);
+    os_unfair_lock_lock(&YTKACESubtitleTraceLock);
+    NSArray *nodes = YTKACESubtitleTrace.allObjects;
+    os_unfair_lock_unlock(&YTKACESubtitleTraceLock);
+    for (id node in nodes) {
+        id walk = YTKACEElementsValue(node, @"nodeController");
+        for (NSUInteger depth = 0; walk != nil && depth < 12; depth++) {
+            if (walk == controller) {
+                YTKACEDebugLog(@"products", @"link depth=%lu %@", (unsigned long)depth,
+                               YTKACETraceState(node));
+                break;
+            }
+            walk = YTKACEElementsValue(walk, @"parent");
+        }
+    }
+}
+
+static void YTKACEInstallSubtitleTrace(void) {
+    YTKACEInstallInstanceHook(@"ELMTextNode", @"__setNodeController:",
+                              (IMP)YTKACETraceSetNodeController,
+                              &OriginalTextNodeSetNodeController);
+    YTKACEInstallClassHook(@"ELMNodeController", @"setParentOnController:toOther:",
+                           (IMP)YTKACETraceSetParent, &OriginalSetParentOnController);
+}
+
 static const void *YTKACESubtitleRecheckAssociation = &YTKACESubtitleRecheckAssociation;
 
 static void YTKACERecheckSubtitleLater(id node) {
@@ -790,9 +871,12 @@ static void YTKACERecheckSubtitleLater(id node) {
         if (strongNode == nil) return;
         objc_setAssociatedObject(strongNode, YTKACESubtitleRecheckAssociation, nil,
                                  OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        if (YTKACENodeSubtitlePlace(strongNode) != YTKACESubtitlePlaceSubtitle) return;
+        YTKACESubtitlePlace later = YTKACENodeSubtitlePlace(strongNode);
+        YTKACEDebugLog(@"products", @"recheck %@", YTKACETraceState(strongNode));
+        if (later != YTKACESubtitlePlaceSubtitle) return;
         NSAttributedString *current = YTKACEElementsValue(strongNode, @"attributedText");
         NSAttributedString *filtered = YTKACESubtitleWithoutProductCount(strongNode, current);
+        YTKACEDebugLog(@"products", @"recheck changed=%d", filtered != current);
         if (filtered == current) return;
         ((void (*)(id, SEL, id))objc_msgSend)(
             strongNode, NSSelectorFromString(@"setAttributedText:"), filtered);
@@ -871,6 +955,7 @@ NSAttributedString *YTKACESubtitleWithoutProductCount(id node, NSAttributedStrin
     }
     if (counts.count == 0) return text;
     YTKACESubtitlePlace place = YTKACENodeSubtitlePlace(node);
+    YTKACETraceSubtitleSet(node);
     if (place == YTKACESubtitlePlaceUnknown) YTKACERecheckSubtitleLater(node);
     if (place != YTKACESubtitlePlaceSubtitle) return text;
 
@@ -1173,6 +1258,7 @@ static CGSize YTKACEFullscreenActionsSizeThatFits(id receiver, SEL selector,
 }
 
 void YTKACEInstallOverlayVisibilityHooks(void) {
+    YTKACEInstallSubtitleTrace();
     YTKACEInstallInstanceHook(@"YTFullscreenActionsView", @"layoutSubviews",
                               (IMP)YTKACEFullscreenActionsLayout,
                               &OriginalFullscreenActionsLayout);
